@@ -20,7 +20,7 @@ from flask import Blueprint, jsonify, render_template, request, redirect, url_fo
 from werkzeug import secure_filename
 from werkzeug.datastructures import MultiDict
 
-from flask.ext.babel import gettext as _
+from flask.ext.babelex import gettext as _
 from flask.ext.login import current_user
 from wtforms import BooleanField, TextField, TextAreaField, HiddenField
 from functools import wraps
@@ -28,7 +28,6 @@ from collections import OrderedDict, defaultdict
 
 import deploy.fabfile as fabfile
 import foofind.utils.pyon as pyon
-from foofind.utils import expanded_instance, fileurl2mid, mid2hex, hex2mid, url2mid, u, mid2url, logging
 from foofind.utils.translations import unfix_lang_values
 from foofind.utils.fooprint import ManagedSelect
 from foofind.utils.flaskutils import send_gridfs_file
@@ -36,6 +35,7 @@ from foofind.utils.downloader import get_file_metadata
 from foofind.services import *
 from foofind.forms.admin import *
 from foofind.utils.pogit import pomanager
+from foofind.utils import expanded_instance, fileurl2mid, mid2hex, hex2mid, url2mid, u, mid2url, logging
 
 
 class DeployTask(object):
@@ -86,7 +86,10 @@ class DeployTask(object):
             cache.cache.set(self._memid, "")
 
         def get_data(self):
-            return u"".join(self._tmp) or u(cache.cache.get(self._memid) or u"")
+            try:
+                return u"".join(self._tmp) or u(cache.cache.get(self._memid) or u"")
+            except:
+                return u""
 
     class DeployThread(multiprocessing.Process):
         '''
@@ -147,6 +150,7 @@ class DeployTask(object):
         self._syncmanager = multiprocessing.Manager()
         self._lock = self._syncmanager.Lock()
         self._lastmode = "%slastmode" % memcache_prefix
+        self._lastbranch = "%slastbranch" % memcache_prefix
         self._memid = "%sbusy" % memcache_prefix
         self._stdout = self.MemcachedBuffer("%sstdout" % memcache_prefix, self._syncmanager)
         self._stderr = self.MemcachedBuffer("%sstderr" % memcache_prefix, self._syncmanager)
@@ -166,6 +170,18 @@ class DeployTask(object):
         if self.busy:
             return self._ownlastmode
         return cache.cache.get(self._lastmode)
+
+    _ownlastbranch = None
+    def get_last_branch(self):
+        '''
+        Obtiene el último branch con el que ha sido llamado
+
+        @rtype str
+        @return cadena del último modo
+        '''
+        if self.busy:
+            return self._ownlastbranch
+        return cache.cache.get(self._lastbranch)
 
     def get_stdout_data(self):
         '''
@@ -227,6 +243,11 @@ class DeployTask(object):
         if mode:
             self._ownlastmode = mode
             cache.cache.set(self._lastmode, mode)
+
+        branch = config.get("branch", None) if config else None
+        if branch:
+            self._ownlastbranch = branch
+            cache.cache.set(self._lastbranch, branch)
 
         self.DeployThread(
             action,
@@ -291,10 +312,11 @@ def admin_required(fn):
 
     @wraps(fn)
     def decorated_view(*args, **kwargs):
-        if not current_user.is_authenticated():
-            return current_app.login_manager.unauthorized()
-        elif current_user.type != 1:
-            abort(403)
+        if hasattr(current_app, "login_manager"):
+            if not current_user.is_authenticated():
+                return current_app.login_manager.unauthorized()
+            elif current_user.type != 1:
+                abort(403)
         return fn(*args, **kwargs)
     return decorated_view
 
@@ -569,7 +591,10 @@ def lock_file_id_and_filename_from_url(url):
     @rtype tupla (str, str)
     @return id en hexadecimal y nombre de fichero
     '''
-    return (mid2hex(fileurl2mid(url)), urllib2.unquote(url.split("/")[-1]).rsplit(".",1)[0])
+    if url.startswith("http") and len(url.split("//")[1].split("/")) > 3:
+        return (mid2hex(fileurl2mid(url)), urllib2.unquote(url.split("/")[-1]).rsplit(".",1)[0])
+    else:
+        return None
 
 @admin.route('/<lang>/admin/locks/<complaint_id>', methods=("GET","POST"))
 @admin.route('/<lang>/admin/lockfiles', methods=("GET","POST"))
@@ -604,11 +629,13 @@ def lock_file(complaint_id=None, url_file_ids=None):
                         and (len(i)*6)%8 == 0
                     ]
             elif searchform.mode.data == "url":
-                filenames.update(
-                    lock_file_id_and_filename_from_url(i)
-                    for i in identifiers
-                    if i.startswith("http") and len(i.split("//")[1].split("/")) > 3
-                    )
+                for i in identifiers:
+                    try:
+                        data = lock_file_id_and_filename_from_url(i)
+                        if data:
+                            filenames[data[0]] = data[1]
+                    except:
+                        pass
                 fileids = filenames.keys()
             if fileids:
                 permalink = url_for('admin.lock_file',
@@ -721,8 +748,7 @@ def getserver(fileid, filename=None):
         if sid:
             try:
                 data = filesdb.get_file(mfileid, sid = sid, bl = None)
-
-            except filesdb.BogusMongoException as e:
+            except BaseException as e:
                 logging.exception(e)
                 flash(e, "error")
         else:
@@ -912,6 +938,10 @@ def deploy():
         lastmode = deployTask.get_last_mode()
         if request.method == "GET" and lastmode:
             form.mode.data = lastmode
+
+        lastbranch = deployTask.get_last_branch()
+        if request.method == "GET" and lastbranch:
+            form.branch.data = lastbranch
     elif mode == "publish":
         form.publish_mode.choices = deploy_backups_datetimes()
     elif mode == "script":
@@ -951,7 +981,7 @@ def deploy():
             # Subir archivos a la carpeta downloads
             for k, f in request.files.iteritems():
                 if f.filename and hasattr(form, k): # Verify this file comes from our form
-                    f.save(os.path.join(env.downloads, secure_filename(f.filename)))
+                    fabfile.save_downloader_file(secure_filename(f.filename), f.stream)
         elif not deployTask.busy:
             config = None
             do_task = True
@@ -1006,6 +1036,9 @@ def deploy():
                     do_task = False
             elif task == "distribute-downloader":
                 config = {"servers":"all"}
+            elif task == "deploy":
+                config = {"branch":form.branch.data}
+
             if task and do_task:
                 flash("admin_deploy_in_progress", "message in_progress_message")
                 force_busy = True
@@ -1145,75 +1178,6 @@ def servers():
         num_items=num_items,
         alternatives=server_list,
         page=page)
-
-@admin.route('/<lang>/admin/downloads', defaults={"filename":None}, methods=("GET","POST"))
-@admin.route('/<lang>/admin/downloads/<path:filename>', methods=("GET","POST"))
-@admin_required
-def downloads(filename=None):
-    '''
-    Gestión de servers
-    '''
-    page = request.args.get("page", 0, int)
-    grps = request.args.get("mode", "all", str)
-    mode = request.args.get("show", "current", str)
-
-    num_items = downloadsdb.count_files()
-    skip, limit, page, num_pages = pagination(num_items)
-    file_list = downloadsdb.list_files(skip, limit)
-
-    form = DownloadForm(request.form)
-
-    if filename:
-        form.filename.data = filename
-
-    file_data = None
-
-    if request.method == "POST":
-        if form.remove.data:
-            downloadsdb.remove_file(filename)
-            flash("admin_saved", "success")
-            return redirect(url_for("admin.downloads"))
-        else:
-            if form.filename.data and form.version.data:
-                old_version = (
-                    form.old_version.data or
-                    downloadsdb.get_last_version(form.filename.data) or
-                    ""
-                    )
-                if form.version.data:
-                    downloadsdb.store_file(
-                        secure_filename(form.filename.data),
-                        request.files["upfile"],
-                        request.files["upfile"].content_type
-                            or mimetypes.guess_type(form.filename.data)[0],
-                        form.version.data)
-                    flash("admin_saved", "success")
-                    return redirect(url_for("admin.downloads"))
-                else:
-                    flash("admin_version_error", "error")
-            else:
-                flash("admin_nochanges", "error")
-    elif not filename is None:
-        file_data = downloadsdb.get_file(filename)
-        form.old_version.data = file_data["version_code"]
-        form.version.data = file_data["version_code"]
-
-    return render_template('admin/downloads.html',
-        file_data=file_data,
-        page_title=_('admin_downloads'),
-        title=admin_title('admin_downloads'),
-        form=form,
-        num_pages=num_pages,
-        num_items=num_items,
-        downloads=file_list,
-        page=page)
-
-@admin.route('/<lang>/admin/download/<path:filename>', defaults={"version":None})
-@admin.route('/<lang>/admin/download/<version>/<path:filename>')
-@admin_required
-def download(version=None, filename=None):
-    f = downloadsdb.stream_file(filename, version)
-    return send_gridfs_file(f)
 
 # Parsers para diccionario de parsers (data_to_form, form_to_data [, data_to_json [, json_to_data]])
 db_types = {
@@ -1645,7 +1609,7 @@ def db_remove(collection, document_id):
         )
 
 @admin.route("/<lang>/admin/actions", methods=("POST","GET"))
-def actions(actionid = None):
+def actions():
 
     form = ActionForm(request.form)
     form.target.choices = [(i,i) for i in configdb.get_current_profiles()]
@@ -1653,11 +1617,12 @@ def actions(actionid = None):
     actions = tuple(configdb.list_actions())
 
     form.submitlist.choices = [
-        (actionid, _('admin_actions_run'))
-        for actionid, fnc, unique, args, kwargs in actions
+        (aid, aid)
+        for aid, fnc, unique, args, kwargs in actions
         ]
 
     if request.method == "POST":
+        actionid = form.submitlist.data[0]
         flash(_("admin_actions_updated"))
         configdb.run_action(actionid)
         return redirect(url_for(".actions"))
@@ -1669,7 +1634,7 @@ def actions(actionid = None):
         interval = current_app.config.get("CONFIG_UPDATE_INTERVAL", -1),
         actions = [(
             submit,
-            actionid,
+            aid,
             "%s(%s)" % (
                 "%s.%s" % (
                     fnc.im_class().__class__.__name__ if hasattr(fnc.im_class(), "__class__") else fnc.im_class().__name__,
@@ -1681,7 +1646,7 @@ def actions(actionid = None):
                 ),
             inspect.getdoc(fnc).decode("utf-8"),
             unique
-            ) for (actionid, fnc, unique, args, kwargs), submit in itertools.izip(actions, iter(form.submitlist))]
+            ) for (aid, fnc, unique, args, kwargs), submit in itertools.izip(actions, iter(form.submitlist))]
         )
 
 

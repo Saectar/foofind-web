@@ -8,14 +8,18 @@
 #   Líneas que comiencen con # o sean vacías serán ignoradas.
 #
 
-flask
+flask==0.10.1
+Werkzeug==0.9.4
+
+markupsafe>=0.18
 
 python-memcached
 
 flask-assets==0.8
-cssutils
+cssutils==0.9.10
 
-flask-babel
+
+flask-babelex
 
 flask-wtf==0.8
 
@@ -23,7 +27,7 @@ flask-zen
 
 flask-cache==0.9.2
 
-flask-login==0.1.1
+flask-login==0.2.6
 
 flask-mail
 
@@ -46,7 +50,7 @@ fabric
 raven==2.0.10
 blinker==1.2
 
-webassets>=0.8
+webassets==0.8
 slimmer
 
 pyquery
@@ -69,3 +73,11 @@ newrelic>=1.11
 hachoir-parser
 hachoir-metadata
 hachoir-core
+
+msgpack-python
+
+requests
+
+# cliente nuevo searchd
+redis
+

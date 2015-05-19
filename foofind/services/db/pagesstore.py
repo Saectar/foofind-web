@@ -13,17 +13,31 @@ class PagesStore(object):
         '''
         Inicialización de la clase.
         '''
-        self.max_pool_size = 0
         self.pages_conn = None
 
     def init_app(self, app):
         '''
-        Inicializa la clase con la configuración de la aplicación.
-        '''
-        self.max_pool_size = app.config["DATA_SOURCE_MAX_POOL_SIZE"]
+        Apply pages database access configuration.
 
-        # Inicia conexiones
-        self.pages_conn = pymongo.Connection(app.config["DATA_SOURCE_USER"], slave_okay=True, max_pool_size=self.max_pool_size)
+        @param app: Flask application.
+        '''
+        if app.config["DATA_SOURCE_PAGES"]:
+            if "DATA_SOURCE_PAGES_RS" in app.config:
+                self.pages_conn = pymongo.MongoReplicaSetClient(app.config["DATA_SOURCE_PAGES"],
+                                                                max_pool_size=app.config["DATA_SOURCE_MAX_POOL_SIZE"],
+                                                                replicaSet = app.config["DATA_SOURCE_PAGES_RS"],
+                                                                read_preference = pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED,
+                                                                tag_sets = app.config.get("DATA_SOURCE_PAGES_RS_TAG_SETS",[{}]),
+                                                                secondary_acceptable_latency_ms = app.config.get("SECONDARY_ACCEPTABLE_LATENCY_MS", 15))
+            else:
+                self.pages_conn = pymongo.MongoClient(app.config["DATA_SOURCE_PAGES"], max_pool_size=app.config["DATA_SOURCE_MAX_POOL_SIZE"], slave_okay=True)
+
+    def share_connections(self, pages_conn=None):
+        '''
+        Allows to share data source connections with other modules.
+        '''
+        if pages_conn:
+            self.pages_conn = pages_conn
 
     def create_complaint(self,data):
         '''

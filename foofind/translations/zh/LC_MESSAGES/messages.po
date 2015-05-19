@@ -1,4 +1,4 @@
-# 
+#
 msgid ""
 msgstr ""
 "Project-Id-Version: 1\n"
@@ -31,14 +31,23 @@ msgstr "发送"
 msgid "required_empty"
 msgstr "评价是必需的 不能为空"
 
+msgid "ok"
+msgstr "确定"
+
 msgid "help_us"
 msgstr "帮助我们"
+
+msgid "legal_info"
+msgstr "法律信息"
 
 msgid "go_home"
 msgstr "返回搜索引擎"
 
 msgid "error_500_message"
 msgstr "发生错误"
+
+msgid "error_500_description"
+msgstr "似乎出现了一些意外状况,我们正在努力解决"
 
 msgid "error_404_message"
 msgstr "页面未找到"
@@ -52,17 +61,32 @@ msgstr "页面不可用"
 msgid "error_410_description"
 msgstr "请求的页面当前不可用，以后也不再用"
 
+msgid "error_502_message"
+msgstr "网关错误"
+
+msgid "error_502_description"
+msgstr "由于网关错误无法访问"
+
 msgid "error_503_message"
 msgstr "无法提供服务"
 
 msgid "error_503_description"
 msgstr "请求的地址当前不可用，请稍后重试。"
 
+msgid "servers_status"
+msgstr "检查服务器状态"
+
 msgid "error_mail_send"
 msgstr "向指定地址发送信息时发生错误。请更换一个或稍后重试。"
 
 msgid "about"
 msgstr "关于"
+
+msgid "no_valid_email"
+msgstr "这不是一个有效的电子邮件地址，正确格式为：user@example.com"
+
+msgid "field_length"
+msgstr "这个栏位必须包含%(min)s到%(max)s个字母"
 
 msgid "no_valid_url"
 msgstr "不是有效的地址"
@@ -92,22 +116,25 @@ msgid "files_indexed"
 msgstr "文件目录"
 
 msgid "last_indexed_files"
-msgstr "最后索引的文件"
+msgstr "大家最近在找"
 
 msgid "i_want_that_file"
-msgstr "我。想知道。这个。文件。"
+msgstr "我要。这个。文件"
 
 msgid "all"
 msgstr "所有"
 
 msgid "index_change"
-msgstr "foofind 已变更"
+msgstr "foofind 一直在进步"
 
 msgid "index_comunity"
-msgstr "成为我们社区的一员"
+msgstr "成为我们的一分子"
+
+msgid "index_first"
+msgstr "争取优先获得信息并积极参与"
 
 msgid "index_suggestion"
-msgstr "还有任何意见？"
+msgstr "请留下您的宝贵意见或建议"
 
 msgid "direct_downloads"
 msgstr "直接下载"
@@ -123,6 +150,12 @@ msgstr "其他流媒体"
 
 msgid "other_direct_downloads"
 msgstr "其他重定向下载"
+
+msgid "some_streamings"
+msgstr "一些串流"
+
+msgid "some_downloads"
+msgstr "一些直接下载"
 
 msgid "others"
 msgstr "其他"
@@ -149,7 +182,7 @@ msgid "no_results_for"
 msgstr "没有结果"
 
 msgid "write_something"
-msgstr "你好！欢迎留言"
+msgstr "您好！欢迎留言"
 
 msgid "previous"
 msgstr "上一个"
@@ -265,6 +298,9 @@ msgstr "流派"
 msgid "seconds"
 msgstr "秒"
 
+msgid "first_files"
+msgstr "正显示前%(value)s个文件。下载可见全部。"
+
 msgid "minutes"
 msgstr "分钟"
 
@@ -316,6 +352,9 @@ msgstr "版本"
 msgid "name"
 msgstr "名字"
 
+msgid "channels"
+msgstr "声道"
+
 msgid "description"
 msgstr "描写类型"
 
@@ -364,6 +403,9 @@ msgstr "标签"
 msgid "license"
 msgstr "许可证"
 
+msgid "created_by"
+msgstr "创建者"
+
 msgid "private_file"
 msgstr "私人文件"
 
@@ -385,11 +427,32 @@ msgstr "日期"
 msgid "trackers"
 msgstr "音轨"
 
+msgid "director"
+msgstr "导演"
+
+msgid "writer"
+msgstr "作者"
+
+msgid "starring"
+msgstr "主演"
+
+msgid "producer"
+msgstr "制片人"
+
+msgid "released"
+msgstr "发行"
+
 msgid "hash"
 msgstr "HASH"
 
 msgid "visualizations"
 msgstr "可视化"
+
+msgid "all_sources"
+msgstr "所有来源"
+
+msgid "share"
+msgstr "分享%(site)s"
 
 msgid "share_download"
 msgstr "分享"
@@ -409,8 +472,20 @@ msgstr "新窗口打开链接"
 msgid "close"
 msgstr "关闭"
 
+msgid "download_source"
+msgstr "从%(source)s下载"
+
 msgid "share_this"
 msgstr "分享"
+
+msgid "watch_source"
+msgstr "观看%(source)s"
+
+msgid "listen"
+msgstr "听"
+
+msgid "listen_source"
+msgstr "听%(source)s"
 
 msgid "share_facebook"
 msgstr "在Facebook上分享"
@@ -494,7 +569,7 @@ msgid "insert_your_password"
 msgstr "输入密码"
 
 msgid "fill_sing_up_form"
-msgstr "填好这张表格成为Foofind注册会员:"
+msgstr "填好这张表格成为Foofind注册会员："
 
 msgid "nickname"
 msgstr "昵称"
@@ -545,7 +620,7 @@ msgid "your_location"
 msgstr "你的位置"
 
 msgid "new_password"
-msgstr "找回密码:(否则,可留空不填)"
+msgstr "找回密码：（否则，可留空不填）"
 
 msgid "save_profile"
 msgstr "保存资料"
@@ -569,7 +644,7 @@ msgid "passwords_not_match"
 msgstr "密码错误"
 
 msgid "sure_delete_account"
-msgstr "你确定要删除你的Foofind帐户吗?"
+msgstr "你确定要删除你的Foofind帐户吗？"
 
 msgid "yes"
 msgstr "是的"
@@ -605,7 +680,7 @@ msgid "forgot_password"
 msgstr "忘记密码？"
 
 msgid "wrong_email_password"
-msgstr "错误的电子邮件或密码 重新输入"
+msgstr "电子邮件地址错误或密码错误，请重新输入"
 
 msgid "welcome"
 msgstr "欢迎"
@@ -620,7 +695,7 @@ msgid "confirm_email"
 msgstr "确认你的电子邮件"
 
 msgid "check_inbox_email_finish"
-msgstr "检查你的收件箱完成注册"
+msgstr "请检查你的收件箱以完成注册"
 
 msgid "foofind_team"
 msgstr "Foofind团队"
@@ -638,7 +713,7 @@ msgid "login_here"
 msgstr "登录"
 
 msgid "enter_email"
-msgstr "输入你的电邮地址 将发送一封邮件恢复你的访问"
+msgstr "输入你的电子邮件地址 我们将发送一封邮件以恢复你的帐号"
 
 msgid "send"
 msgstr "发送"
@@ -665,19 +740,19 @@ msgid "email_same_register"
 msgstr "电子邮件地址必须和你登记的相同"
 
 msgid "email_not_database"
-msgstr "电子邮件不存在 再试一次"
+msgstr "电子邮件地址不存在 请再试一次"
 
 msgid "check_inbox_email_restore"
-msgstr "检查你的收件箱 找回你的Foofind密码"
+msgstr "请检查您的收件箱以找回密码"
 
 msgid "restore_access"
-msgstr "找回你的Foofind密码"
+msgstr "找回密码"
 
 msgid "restore_account"
 msgstr "或许你想要恢复您的Foofind访问 点击这个链接来恢复您的Foofind帐户:"
 
 msgid "ignore_message"
-msgstr "否则不理睬这个信息"
+msgstr "否则忽视此信息"
 
 msgid "login_vote"
 msgstr "投票"
@@ -807,13 +882,14 @@ msgstr "您的翻译结果已经提交成功。谢谢您的帮助！"
 msgid "translate_at_least_one"
 msgstr "请至少一个文本翻译"
 
-msgid "foodownloader_overview"
+msgid "A fast client for the Torrent P2P network"
+msgstr "是一个小巧快速的 Torrent P2P网络客户端"
+
+msgid "downloader_overview"
 msgstr "概述"
 
-msgid "foodownloader_overview_text"
+msgid "downloader_overview_text"
 msgstr ""
-"**Foofind Download Manager** 是一个小巧快速的 **Torrent** P2P网络客户端\r\n"
-"\r\n"
 "Foofind Download Manager  容易使用，界面直观，安全。你可以随时暂停，恢复下载\r\n"
 "软件特点：\r\n"
 "\r\n"
@@ -821,29 +897,49 @@ msgstr ""
 "*直观的界面\r\n"
 "*支持DHT,uPnP和uTorrent"
 
-msgid "foodownloader_sharing"
+msgid "downloader_sharing"
 msgstr "下载并且分享软件"
 
-msgid "foodownloader_download"
+msgid "downloader_safety"
+msgstr "安全提取你的文件"
+
+msgid "downloader_download"
 msgstr "免费下载"
 
-msgid "foodownloader_download_source"
+msgid "downloader_download_source"
 msgstr "下载原始版"
 
-msgid "foodownloader_meta_description"
+msgid "downloader_meta_description"
 msgstr "Foofind Download Manager是一个小巧方便的torrent下载软件"
 
-msgid "foodownloader_thanks"
+msgid "downloader_thanks"
 msgstr "感谢下载！"
 
-msgid "foodownloader_thanks_message"
+msgid "downloader_thanks_message"
 msgstr "感谢安装Foofing Download Manager！"
 
+msgid "downloader_download_coming_soon"
+msgstr "抱歉：尚未提供适用于您的操作系统。"
+
+msgid "downloader_dialog_title"
+msgstr "嘿！你需要一个Torrent客户端下载此文件"
+
+msgid "downloader_dialog_yes"
+msgstr "是的，下载用Foofind Download Manager下载"
+
+msgid "downloader_dialog_text"
+msgstr ""
+"现在下载安装Foofind Download Manager来得到这个文件。\r\n"
+"我们的软件让你下载的种子更快，比以往任何时候都更容易 - 完全免费！"
+
+msgid "downloader_update_message"
+msgstr "新版本的%(appname)s (%(version)s)，准备安装。你想升级吗？"
+
 msgid "here"
-msgstr "里报告"
+msgstr "这里"
 
 msgid "translation_beta"
-msgstr "这个语言翻译在测试阶段。如果你发现缺失或是错误的翻译,请在这%(here)s。"
+msgstr "此语言尚在测试阶段，如果您发现错译或漏译，请在%(here)s提交。"
 
 msgid "other"
 msgstr "其他"

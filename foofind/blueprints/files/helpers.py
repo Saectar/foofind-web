@@ -8,7 +8,7 @@ from foofind.services import *
 from foofind.utils import mid2hex, multipartition, logging
 from foofind.utils.content_types import *
 from foofind.utils.splitter import SEPPER, slugify
-from flask.ext.babel import gettext as _
+from flask.ext.babelex import gettext as _
 
 __all__=(
     "FILTERS","DatabaseError","FileNotExist","FileRemoved","FileFoofindRemoved","FileUnknownBlock","FileNoSources",
@@ -268,8 +268,8 @@ def save_visited(files):
     '''
     Recibe una lista de resultados de fill_data y guarda las url que sean de web
     '''
-    if not g.search_bot:
-        result=[{"_id": data['urls'][0], "type":src} for afile in files for src, data in afile['view']['sources'].iteritems() if data['icon'] in ['web','torrent']]
+    if not g.search_bot and feedbackdb.initialized:
+        result=[{"_id": data['urls'][0], "type":src} for afile in files for src, data in afile['view']['sources'].iteritems() if data['urls'] and data['icon'] in ['web','torrent']]
 
         if result:
             try:

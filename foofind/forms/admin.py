@@ -8,8 +8,7 @@ from flask.ext.wtf import SubmitField, SelectMultipleField, CheckboxInput,\
                            SelectField, TextField, BooleanField, IntegerField,\
                            FileField,\
                            html_params as whtml_params,HTMLString
-from flask.ext.babel import lazy_gettext as _
-from flask.ext.babel import gettext
+from flask.ext.babelex import lazy_gettext as _, gettext
 
 from .fields import HTMLString, fix_param_name, html_params
 
@@ -68,31 +67,11 @@ class MultiHostField(SelectMultipleField):
     option_widget = CheckboxInput()
 
 class MultiSubmit(SelectMultipleField):
-    class MultiWidget(object):
-        '''
-        SelectMultipleField en un ul con checkboxes.
-        '''
-        def __init__(self, html_tag='ul'):
-            self.html_tag = html_tag
-            self.inner_kwarg_prefix = "submit_"
-
-        def __call__(self, field, **kwargs):
-            kwargs.setdefault('id', field.id)
-            likp = len(self.inner_kwarg_prefix)
-            #inner_kwargs = {fix_param_name(k[likp:]):v for k,v in kwargs.iteritems() if k.startswith(self.inner_kwarg_prefix)}
-            outer_kwargs = {fix_param_name(k):v for k,v in kwargs.iteritems() if not k.startswith(self.inner_kwarg_prefix)}
-            return HTMLString(u'<%s %s>%s</%s>' % (
-                self.html_tag,
-                html_params(**outer_kwargs),
-                u''.join(u'<li>%s</li>' % i for i in self),
-                self.html_tag))
-
     def __init__(self, *args, **kwargs):
         SelectMultipleField.__init__(self, *args, **kwargs)
         self.label = LoneLabel(self.id, self.label.text)
         self.status = kwargs.get("status", {})
 
-    widget = MultiWidget()
     option_widget = SubmitInput()
 
 class ValidateTranslationForm(Form):
@@ -133,6 +112,7 @@ class OriginForm(Form):
 
 class DeployForm(Form):
     mode = SelectField(_("admin_deploy_mode"), default="staging")
+    branch = TextField(_("admin_deploy_branch"), default="master")
     deploy = SubmitField(_("admin_deploy_deploy"), default="deploy")
     deploy_rollback = SubmitField(_("admin_deploy_deploy_rollback"), default="deploy-rollback")
     clean_local = SubmitField(_("admin_deploy_clean_local"), default="clean_local")
@@ -192,7 +172,7 @@ class GetServerForm(Form):
 
 class ActionForm(Form):
     target = SelectField(_("admin_actions_target"))
-    submitlist = MultiSubmit()
+    submitlist = MultiSubmit("task")
 
 class LogForm(Form):
     processing = HiddenField(default=False, filters=(lambda x: str(x).strip().lower() == "true" ,))

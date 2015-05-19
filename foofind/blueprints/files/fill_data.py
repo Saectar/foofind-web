@@ -4,8 +4,7 @@
 '''
 import urllib, re
 from flask import g, Markup
-from flask.ext.babel import gettext as _
-from collections import defaultdict
+from flask.ext.babelex import gettext as _
 from urlparse import urlparse
 from itertools import izip_longest, chain
 
@@ -23,8 +22,9 @@ def init_data(file_data, ntts=[]):
     '''
     Inicializa el diccionario de datos del archivo
     '''
+    content_fixes(file_data)
     file_data["id"]=mid2url(file_data['_id'])
-    file_data['name']=file_data['src'][mid2hex(file_data["_id"])]['url']
+    file_data['name']=file_data['src'].itervalues().next()['url']
 
     file_se = file_data["se"] if "se" in file_data else None
     ntt = ntts[int(float(file_se["_id"]))] if file_se and "_id" in file_se and file_se["_id"] in ntts else None
@@ -97,7 +97,7 @@ def choose_filename(f,text_cache=None):
     f['view']['url'] = mid2url(hex2mid(f['file']['_id']))
     f['view']['fnid'] = chosen
     if chosen:
-        filename = fns[chosen]['n'] if "torrent:name" not in f["file"]["md"] else f["file"]["md"]["torrent:name"]
+        filename = fns[chosen]['n']
         ext = fns[chosen]['x']
     else: #uses filename from src
         filename = ""
@@ -120,7 +120,6 @@ def choose_filename(f,text_cache=None):
 
     nfilename = seoize_text(filename, " ",True, 0)
     f['view']['nfn'] = nfilename
-
     # añade el nombre del fichero como palabra clave
     g.keywords.update(set(keyword for keyword in nfilename.split(" ") if len(keyword)>1))
 
@@ -148,10 +147,10 @@ def build_source_links(f):
             return url_parts[i-1]+'.'+url_parts[i];
 
     f['view']['action']='download'
-    f['view']['sources']=defaultdict(dict)
+    f['view']['sources']={}
     max_weight=0
     icon=""
-    url_pattern=url_pattern_generated=False
+    any_downloader=False
 
     # agrupación de origenes
     source_groups = {}
@@ -162,13 +161,14 @@ def build_source_links(f):
         if not src.get('bl',None) in (0, None):
             continue
 
-        downloader=join=False
+        url_pattern=downloader=join=False
         count=0
         part=url=""
         source_data=g.sources[src["t"]] if "t" in src and src["t"] in g.sources else None
         if source_data is None: #si no existe el origen del archivo
             logging.error("El fichero contiene un origen inexistente en la tabla \"sources\": %s" % src["t"], extra={"file":f})
-            feedbackdb.notify_source_error(f['file']["_id"], f['file']["s"])
+            if feedbackdb.initialized:
+                feedbackdb.notify_source_error(f['file']["_id"], f['file']["s"])
             continue
         elif "crbl" in source_data and int(source_data["crbl"])==1: #si el origen esta bloqueado
             continue
@@ -188,7 +188,7 @@ def build_source_links(f):
         #torrenthash antes de torrent porque es un caso especifico
         elif source_data["d"]=="BitTorrentHash":
             downloader=True
-            link_weight=0.7 if 'torrent:tracker' in f['file']['md'] or 'torrent:trackers' in f['file']['md'] else 0.1
+            link_weight=0.9 if 'torrent:tracker' in f['file']['md'] or 'torrent:trackers' in f['file']['md'] else 0.1
             tip="Torrent MagnetLink"
             source="tmagnet"
             icon="torrent"
@@ -203,7 +203,6 @@ def build_source_links(f):
                 trackers = f['file']['md']['torrent:trackers']
                 if isinstance(trackers, basestring):
                     part += unicode("".join('&tr='+urllib.quote_plus(tr) for tr in u(trackers).encode("UTF-8").split(" ")), "UTF-8")
-
         elif "t" in source_data["g"]:
             downloader=True
             link_weight=0.8
@@ -214,7 +213,8 @@ def build_source_links(f):
             else:
                 tip=source=get_domain(src['url'])
             icon="torrent"
-            source_groups[icon] = tip
+            if not icon in source_groups:
+                source_groups[icon] = tip
         elif source_data["d"]=="Gnutella":
             link_weight=0.2
             tip="Gnutella"
@@ -247,14 +247,17 @@ def build_source_links(f):
         else:
             continue
 
-        view_source = f['view']['sources'][source]
+        if source in f['view']['sources']:
+            view_source = f['view']['sources'][source]
+        else:
+            view_source = f['view']['sources'][source] = {}
         view_source.update(source_data)
 
-        if 'downloader' in view_source:
-            if downloader:
-                view_source['downloader']=1
-        else:
-            view_source['downloader']=1 if downloader else 0
+        if downloader:
+            any_downloader = True
+            view_source['downloader']=1
+        elif not 'downloader' in view_source:
+            view_source['downloader']=0
 
         view_source['tip']=tip
         view_source['icon']=icon
@@ -278,9 +281,8 @@ def build_source_links(f):
             if url_pattern:
                 view_source['urls']=[source_data["url_pattern"]%url]
                 f['view']['source_id']=url
-                url_pattern=False
-                url_pattern_generated=True
-            elif not url_pattern_generated:
+                view_source["pattern_used"]=True
+            elif not "pattern_used" in view_source:
                 view_source['urls'].append(url)
 
             if source_data["d"]!="eD2k":
@@ -291,6 +293,7 @@ def build_source_links(f):
             f['view']['source'] = source
 
     f['view']['source_groups'] = sorted(source_groups.items())
+    f['view']['any_downloader'] = any_downloader
 
     if "source" not in f["view"]:
         raise FileNoSources
@@ -298,7 +301,7 @@ def build_source_links(f):
     if icon!="web":
         for src,info in f['view']['sources'].items():
             if info['join']:
-                f['view']['sources'][src]['urls'].append("magnet:?dn="+f['view']['pfn']+("&xl="+str(f['file']['z']) if 'z' in f['file'] else "")+"&"+"&".join(info['parts']))
+                f['view']['sources'][src]['urls'].append("magnet:?"+"&".join(info['parts'])+"&dn="+f['view']['pfn']+("&xl="+str(f['file']['z']) if 'z' in f['file'] else ""))
             elif not 'urls' in info:
                 del(f['view']['sources'][src])
 
@@ -445,6 +448,10 @@ def format_metadata(f,text_cache, search_text_shown=False):
         except BaseException as e:
             logging.warn(e)
 
+        # thumbnail
+        if "thumbnail" in file_md:
+            f["view"]["thumbnail"] = file_md["thumbnail"]
+
         #metadatos que tienen otros nombres
         try:
             view_md.update(("tags", file_md[meta]) for meta in ("keywords", "tags", "tag") if meta in file_md)
@@ -508,7 +515,7 @@ def format_metadata(f,text_cache, search_text_shown=False):
 
             if file_type in ("audio", "video", "image"):
                 view_md.update((meta, file_md[meta]) for meta in ("genre", "track", "artist", "author", "colors") if meta in file_md)
-                view_searches.update((meta, seoize_text(file_md[meta], "_", False)) for meta in ("genre", "artist", "author") if meta in file_md)
+                view_searches.update((meta, seoize_text(file_md[meta], "_", False)) for meta in ("artist", "author") if meta in file_md)
         except BaseException as e:
             logging.warn(e)
 
@@ -623,12 +630,13 @@ def format_metadata(f,text_cache, search_text_shown=False):
 
                 view_md[metadata]=value
 
-                # resaltar contenidos que coinciden con la busqueda
-                view_mdh[metadata]=highlight(text,value) if text and len(text)<100 else value
+                # resaltar contenidos que coinciden con la busqueda, para textos no muy largos
+                if len(value)<500:
+                    view_mdh[metadata]=highlight(text,value) if text and len(text)<100 else value
             elif isinstance(value, float): #no hay ningun metadato tipo float
-                view_md[metadata]=view_mdh[metadata]=str(int(value))
+                view_md[metadata]=str(int(value))
             else:
-                view_md[metadata]=view_mdh[metadata]=value
+                view_md[metadata]=value
     # TODO: mostrar metadatos con palabras buscadas si no aparecen en lo mostrado
 
 def embed_info(f):
@@ -640,53 +648,56 @@ def embed_info(f):
     embed_code = None
     for src_id, src_data in f["file"]["src"].iteritems():
         source_id = src_data["t"]
-        source_data = g.sources[source_id]
-        if source_data.get("embed_active", False) and "embed" in source_data:
-            try:
-                embed_code = source_data["embed"]
 
-                # comprueba si el content type se puede embeber
-                embed_cts = source_data["embed_cts"] if "embed_cts" in source_data else DEFAULT_EMBED_CTS
-                if not f["view"]["ct"] in embed_cts: continue
+        source_data = g.sources.get(source_id, None)
+        if not (source_data and source_data.get("embed_active", False) and "embed" in source_data):
+            continue
 
-                embed_groups = ()
-                # url directamente desde los sources
-                if "source_id" in f["view"] and f["view"]["source_id"]:
-                    embed_groups = {"id": f["view"]["source_id"]}
-                elif "url_embed_regexp" in source_data and source_data["url_embed_regexp"]:
-                    # comprueba si la url puede ser utilizada para embeber
-                    embed_url = src_data["url"]
-                    regexp = source_data["url_embed_regexp"]
-                    embed_match = cache.regexp(regexp).match(embed_url)
-                    if embed_match is None:
+        try:
+            embed_code = source_data["embed"]
+
+            # comprueba si el content type se puede embeber
+            embed_cts = source_data["embed_cts"] if "embed_cts" in source_data else DEFAULT_EMBED_CTS
+            if not f["view"]["ct"] in embed_cts: continue
+
+            embed_groups = ()
+            # url directamente desde los sources
+            if "source_id" in f["view"] and f["view"]["source_id"]:
+                embed_groups = {"id": f["view"]["source_id"]}
+            elif "url_embed_regexp" in source_data and source_data["url_embed_regexp"]:
+                # comprueba si la url puede ser utilizada para embeber
+                embed_url = src_data["url"]
+                regexp = source_data["url_embed_regexp"]
+                embed_match = cache.regexp(regexp).match(embed_url)
+                if embed_match is None:
+                    continue
+                embed_groups = embed_match.groupdict()
+
+            if "%s" in embed_code and "id" in embed_groups: # Modo simple, %s intercambiado por el id
+                embed_code = embed_code % (
+                    # Workaround para embeds con varios %s
+                    # no se hace replace para permitir escapes ('\%s')
+                    (embed_groups["id"],) * embed_code.count("%s")
+                    )
+            else:
+                # Modo completo, %(variable)s intercambiado por grupos con nombre
+                replace_dict = dict(f["file"]["md"])
+                replace_dict["width"] = embed_width
+                replace_dict["height"] = embed_height
+                replace_dict.update(embed_groups)
+                try:
+                    embed_code = embed_code % replace_dict
+                except KeyError as e:
+                    # No logeamos los errores por falta de metadatos 'special'
+                    if all(i.startswith("special:") for i in e.args):
                         continue
-                    embed_groups = embed_match.groupdict()
-
-                if "%s" in embed_code and "id" in embed_groups: # Modo simple, %s intercambiado por el id
-                    embed_code = embed_code % (
-                        # Workaround para embeds con varios %s
-                        # no se hace replace para permitir escapes ('\%s')
-                        (embed_groups["id"],) * embed_code.count("%s")
-                        )
-                else:
-                    # Modo completo, %(variable)s intercambiado por grupos con nombre
-                    replace_dict = dict(f["file"]["md"])
-                    replace_dict["width"] = embed_width
-                    replace_dict["height"] = embed_height
-                    replace_dict.update(embed_groups)
-                    try:
-                        embed_code = embed_code % replace_dict
-                    except KeyError as e:
-                        # No logeamos los errores por falta de metadatos 'special'
-                        if all(i.startswith("special:") for i in e.args):
-                            continue
-                        raise e
-            except BaseException as e:
-                logging.exception(e)
-                continue
-            f["view"]["embed"] = embed_code
-            f["view"]["play"]  = (source_data.get("embed_disabled", ""), source_data.get("embed_enabled", ""))
-            break
+                    raise e
+        except BaseException as e:
+            logging.exception(e)
+            continue
+        f["view"]["embed"] = embed_code
+        f["view"]["play"]  = (source_data.get("embed_disabled", ""), source_data.get("embed_enabled", ""))
+        break
 
 def fill_data(file_data, text=None, ntts={}):
     '''
@@ -699,7 +710,6 @@ def fill_data(file_data, text=None, ntts={}):
     # se asegura que esten cargados los datos de origenes y servidor de imagen antes de empezar
     fetch_global_data()
     f=init_data(file_data, ntts)
-    content_fixes(f["file"])
 
     choose_file_type(f)
     # al elegir nombre de fichero, averigua si aparece el texto buscado
@@ -743,7 +753,7 @@ def get_file_metadata(file_id, file_name=None):
     '''
     try:
         data = filesdb.get_file(file_id, bl = None)
-    except filesdb.BogusMongoException as e:
+    except BaseException as e:
         logging.exception(e)
         raise DatabaseError
 
@@ -754,18 +764,22 @@ def get_file_metadata(file_id, file_name=None):
         if sid:
             try:
                 data = filesdb.get_file(file_id, sid = sid, bl = None)
-                feedbackdb.notify_indir(file_id, sid)
-            except filesdb.BogusMongoException as e:
+                if feedbackdb.initialized:
+                    feedbackdb.notify_indir(file_id, sid)
+            except BaseException as e:
                 logging.exception(e)
                 raise DatabaseError
 
     if data:
-        if "bl" in data and not data["bl"] in (0, None):
-            if data["bl"] == 1: raise FileFoofindRemoved
-            elif data["bl"] == 3: raise FileRemoved
+        bl = data.get("bl",None)
+        if bl and isinstance(bl, (str, unicode)) and bl.isdigit():
+            bl = int(bl)
+        if bl:
+            if bl == 1: raise FileFoofindRemoved
+            elif bl == 3: raise FileRemoved
             logging.warn(
-                "File with an unknown 'bl' value found: %d" % data["bl"],
-                extra=data)
+                "File with an unknown 'bl' value found: %s" % repr(bl),
+                    extra=data)
             raise FileUnknownBlock
 
         file_se = data["se"] if "se" in data else None

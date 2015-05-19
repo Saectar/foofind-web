@@ -3,27 +3,27 @@
     Módulo principal de la aplicación Web
 """
 import foofind.globals
-import os, os.path, defaults
+import os, os.path, defaults, datetime
 
 from collections import OrderedDict
-from flask import Flask, g, request, session, render_template, redirect, abort, url_for, make_response, current_app
+from flask import Flask, g, request, session, render_template, redirect, abort, url_for, make_response, current_app, _request_ctx_stack
 from flask.ext.assets import Environment, Bundle
-from flask.ext.babel import get_translations, gettext as _
+from flask.ext.babelex import get_domain, gettext as _
 from flask.ext.login import current_user
 from babel import support, localedata, Locale
 from raven.contrib.flask import Sentry
 from webassets.filter import register_filter
 from hashlib import md5
 
+from foofind.services import *
 from foofind.user import User
 from foofind.blueprints.index import index
 from foofind.blueprints.page import page
 from foofind.blueprints.user import user,init_oauth
 from foofind.blueprints.files import files
 from foofind.blueprints.api import api
-from foofind.blueprints.downloads import downloads, track_downloader_info
+from foofind.blueprints.downloader import downloader, get_downloader_properties
 from foofind.blueprints.labs import add_labs, init_labs
-from foofind.services import *
 from foofind.templates import register_filters
 from foofind.utils.webassets_filters import JsSlimmer, CssSlimmer
 from foofind.utils import u, logging
@@ -69,6 +69,7 @@ def create_app(config=None, debug=False):
         sentry.init_app(app)
     logging.getLogger().setLevel(logging.DEBUG if debug else logging.INFO)
 
+
     # Configuración dependiente de la versión del código
     revision_filename_path = os.path.join(os.path.dirname(app.root_path), "revision")
     if os.path.exists(revision_filename_path):
@@ -110,7 +111,7 @@ def create_app(config=None, debug=False):
     app.register_blueprint(user)
     app.register_blueprint(files)
     app.register_blueprint(api)
-    app.register_blueprint(downloads)
+    app.register_blueprint(downloader)
     add_labs(app) # Labs (blueprints y alternativas en pruebas)
 
     # Web Assets
@@ -128,14 +129,12 @@ def create_app(config=None, debug=False):
     assets.register('css_ie7', 'css/ie7.css', filters='css_slimmer', output='gen/ie7.css')
     assets.register('css_labs', 'css/jquery-ui.css', Bundle('css/labs.css', filters='pyscss', output='gen/l.css', debug=False), filters='css_slimmer', output='gen/labs.css')
     assets.register('css_admin', Bundle('css/admin.css', 'css/jquery-ui.css', filters='css_slimmer', output='gen/admin.css'))
-    assets.register('css_foodownloader', Bundle('css/foodownloader.css', filters='css_slimmer', output='gen/foodownloader.css'))
 
     assets.register('js_all', Bundle('js/jquery.js', 'js/jquery-ui.js', 'js/jquery.ui.selectmenu.js', 'js/files.js', filters='rjsmin', output='gen/foofind.js'), )
     assets.register('js_ie', Bundle('js/html5shiv.js', 'js/jquery-extra-selectors.js', 'js/jquery.ba-hashchange.js', 'js/selectivizr.js', filters='rjsmin', output='gen/ie.js'))
     assets.register('js_search', Bundle('js/jquery.hoverIntent.js', 'js/search.js', filters='rjsmin', output='gen/search.js'))
     assets.register('js_labs', Bundle('js/jquery.js', 'js/jquery-ui.js', 'js/labs.js', filters='rjsmin', output='gen/labs.js'))
     assets.register('js_admin', Bundle('js/jquery.js',  'js/jquery-ui-admin.js', 'js/admin.js', filters='rjsmin', output='gen/admin.js'))
-    assets.register('js_foodownloader', Bundle('js/jquery.js', 'js/foodownloader.js', filters='rjsmin', output='gen/foodownloader.js'))
 
     # proteccion CSRF
     csrf.init_app(app)
@@ -148,18 +147,17 @@ def create_app(config=None, debug=False):
         '''
         if 'lang' in values or not g.lang:
             return
-        #if endpoint in app.view_functions and hasattr(app.view_functions[endpoint], "_fooprint"):
+        #if endpoint in current_app.view_functions and hasattr(current_app.view_functions[endpoint], "_fooprint"):
         #    return
-        if app.url_map.is_endpoint_expecting(endpoint, 'lang'):
+        if current_app.url_map.is_endpoint_expecting(endpoint, 'lang'):
             values['lang'] = g.lang
 
-    all_langs = app.config["ALL_LANGS"]
-    pull_lang_code_languages = OrderedDict((code, (localedata.load(code)["languages"], code in app.config["BETA_LANGS"])) for code in all_langs)
     @app.url_value_preprocessor
     def pull_lang_code(endpoint, values):
         '''
         Carga el código de idioma en la variable global.
         '''
+        all_langs = current_app.config["ALL_LANGS"]
         # obtiene el idioma de la URL
         g.url_lang = None
         if values is not None:
@@ -186,11 +184,11 @@ def create_app(config=None, debug=False):
 
         if g.lang not in all_langs:
             logging.warn("Wrong language choosen.")
-            g.lang = app.config["LANGS"][0]
+            g.lang = current_app.config["LANGS"][0]
 
         # se carga la lista de idiomas como se dice en cada idioma
-        g.languages = pull_lang_code_languages
-        g.beta_lang = g.lang in app.config["BETA_LANGS"]
+        g.languages = OrderedDict((code, (localedata.load(code)["languages"], code in current_app.config["BETA_LANGS"])) for code in all_langs)
+        g.beta_lang = g.lang in current_app.config["BETA_LANGS"]
 
     # Traducciones
     babel.init_app(app)
@@ -224,7 +222,9 @@ def create_app(config=None, debug=False):
     feedbackdb.init_app(app)
     configdb.init_app(app)
     entitiesdb.init_app(app)
-    downloadsdb.init_app(app)
+
+    for service_name, params in app.config["DATA_SOURCE_SHARING"].iteritems():
+        eval(service_name).share_connections(**{key:eval(value) for key, value in params.iteritems()})
 
     # Servicio de búsqueda
     @app.before_first_request
@@ -244,17 +244,22 @@ def create_app(config=None, debug=False):
     # Refresco de conexiones
     eventmanager.once(filesdb.load_servers_conn)
     eventmanager.interval(app.config["FOOCONN_UPDATE_INTERVAL"], filesdb.load_servers_conn)
-    eventmanager.interval(app.config["FOOCONN_UPDATE_INTERVAL"], entitiesdb.connect)
 
     # Refresco de configuración
     eventmanager.once(configdb.pull)
     eventmanager.interval(app.config["CONFIG_UPDATE_INTERVAL"], configdb.pull)
 
-    # guarda registro de downloader
-    eventmanager.interval(app.config["CONFIG_UPDATE_INTERVAL"], track_downloader_info)
+    # downloader files
+    downloader_files = app.config["DOWNLOADER_FILES"]
+    base_path = os.path.abspath(os.path.join(app.root_path,"../downloads"))
+    def update_downloader_properties():
+        '''
+        Downloader updated.
+        '''
+        local_cache["downloader_properties"] = get_downloader_properties(base_path, downloader_files)
 
-    # Carga la traducción alternativa
-    fallback_lang = support.Translations.load(os.path.join(app.root_path, 'translations'), ["en"])
+    configdb.register_action("update_downloader", update_downloader_properties)
+    local_cache["downloader_properties"] = get_downloader_properties(base_path, downloader_files)
 
     # Unittesting
     unit.init_app(app)
@@ -264,13 +269,17 @@ def create_app(config=None, debug=False):
 
     if app.config["UNITTEST_INTERVAL"]:
         eventmanager.timeout(20, unit.run_tests)
-        #eventmanager.interval(app.config["UNITTEST_INTERVAL"], unit.run_tests)
+        #eventmanager.interval(current_app.config["UNITTEST_INTERVAL"], unit.run_tests)
+
+    # IPs españolas
+    spanish_ips.load(os.path.join(os.path.dirname(app.root_path),app.config["SPANISH_IPS_FILENAME"]))
 
     @app.before_request
     def before_request():
 
         # No preprocesamos la peticiones a static
         if request.path.startswith("/static"):
+            g.accept_cookies = None
             return
 
         # default values for g object
@@ -280,12 +289,13 @@ def create_app(config=None, debug=False):
         check_rate_limit(g.search_bot)
 
         # si el idioma de la URL es inválido, devuelve página no encontrada
+        all_langs = current_app.config["ALL_LANGS"]
         if g.url_lang and not g.url_lang in all_langs:
             abort(404)
 
-        # si no es el idioma alternativo, lo añade por si no se encuentra el mensaje
+        # añade idioma por defecto si no hay traducción de algún mensaje en el idioma actual
         if g.lang!="en":
-            get_translations().add_fallback(fallback_lang)
+            add_translation_fallback("en")
 
         # si hay que cambiar el idioma
         if request.args.get("setlang",None):
@@ -301,8 +311,6 @@ def create_app(config=None, debug=False):
         descr = _("about_text")
         g.page_description = descr[:descr.find("<br")]
 
-        g.foodownloader = app.config["FOODOWNLOADER"] and (request.user_agent.platform == "windows")
-
         # ignora peticiones sin blueprint
         if request.blueprint is None and request.path.endswith("/"):
             if "?" in request.url:
@@ -315,11 +323,13 @@ def create_app(config=None, debug=False):
 
     @app.after_request
     def after_request(response):
-        if request.user_agent.browser == "msie": response.headers["X-UA-Compatible"] = "IE-edge"
+        if request.user_agent.browser == "msie": response.headers["X-UA-Compatible"] = "IE=edge"
+
+        if g.accept_cookies == "0":
+            response.set_cookie("ck", "2", expires=datetime.datetime.now() + datetime.timedelta(3650))
         return response
 
     # Páginas de error
-
     @allerrors(app, 400, 401, 403, 404, 405, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 429, 500, 501, 502, 503)
     def all_errors(e):
         error_code, error_title, error_description = get_error_code_information(e)
@@ -334,6 +344,8 @@ def create_app(config=None, debug=False):
     return app
 
 def init_g():
+    g.accept_cookies = None
+
     # argumentos de busqueda por defecto
     g.args = {}
     g.active_types = {}
@@ -357,9 +369,44 @@ def init_g():
     g.autocomplete_disabled = "false" if current_app.config["SERVICE_TAMING_ACTIVE"] else "true"
 
     # dominio de la web
-    g.domain = "foofind.is"
+    g.domain = "foofind.is" if request.url_root.rstrip("/").endswith(".is") else "foofind.com"
 
     # informacion de la página por defecto
     g.title = g.domain
     g.keywords = set()
     g.page_description = g.title
+
+    g.full_lang = current_app.config["ALL_LANGS_COMPLETE"][g.lang]
+
+    # downloader links
+    g.downloader = current_app.config["DOWNLOADER"]
+    g.downloader_properties = local_cache["downloader_properties"]
+
+    g.user_build = current_app.config["DOWNLOADER_DEFAULT_BUILD"]
+
+    # Find the best active build for the user
+    for build, info in g.downloader_properties.iteritems():
+        try:
+            if build != "common" and info["active"] and info["length"] and info.get("check_user_agent", lambda x:False)(request.user_agent):
+                g.user_build = build
+        except BaseException as e:
+            logging.exception(e)
+
+
+    accept_cookies = request.cookies.get("ck", "0")
+    if accept_cookies=="0":
+        if not (any(lang_code in request.accept_languages.values() for lang_code in current_app.config["SPANISH_LANG_CODES"]) or request.remote_addr in spanish_ips):
+            accept_cookies = "2"
+    g.accept_cookies = accept_cookies
+
+
+def add_translation_fallback(locale):
+    domain = get_domain()
+    translations = domain.get_translations()
+    if not translations._fallback:
+        ctx = _request_ctx_stack.top
+        trans_cache = domain.get_translations_cache(ctx)
+        dirname = domain.get_translations_path(ctx)
+
+        translations.add_fallback(support.Translations.load(dirname, locale))
+        trans_cache[str(g.lang)] = translations

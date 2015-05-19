@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import render_template, flash, current_app
-from flask.ext.babel import gettext as _
-from flask.ext.babel import Babel
+from flask.ext.babelex import gettext as _, Babel
 from flask.ext.login import LoginManager
 from flask.ext.mail import Mail, Message
 from flask.ext.seasurf import SeaSurf
@@ -34,8 +33,8 @@ def send_mail(subject,to,template=None,attachment=None,**kwargs):
         mail.send(msg)
         return True
     except SMTPRecipientsRefused as e:
-        flash("error_mail_send")
         # se extrae el código y el mensaje de error
         (code,message)=e[0].values()[0]
         logging.warn("%d: %s"%(code,message))
+        flash("error_mail_send")
         return False
